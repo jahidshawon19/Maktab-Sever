@@ -12,7 +12,7 @@ const attendanceRoutes = require("./routes/attendanceRoutes");
 const app = express();
 
 app.use(cors());
-app.options("*", cors());
+app.options(/.*/, cors());
 
 app.use(express.json());
 
