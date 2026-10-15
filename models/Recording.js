@@ -28,7 +28,13 @@ const recordingSchema = new mongoose.Schema(
       required: true,
     },
 
-    path: {
+    // Cloudinary fields (replaces local disk path)
+    cloudinaryUrl: {
+      type: String,
+      required: true,
+    },
+
+    cloudinaryPublicId: {
       type: String,
       required: true,
     },
@@ -43,7 +49,6 @@ const recordingSchema = new mongoose.Schema(
     timestamps: true,
     toJSON: {
       transform: (_doc, ret) => {
-        delete ret.path;
         delete ret.__v;
         return ret;
       },

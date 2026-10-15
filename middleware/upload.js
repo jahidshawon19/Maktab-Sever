@@ -1,33 +1,28 @@
-const fs = require("fs");
-const path = require("path");
 const multer = require("multer");
+const { CloudinaryStorage } = require("multer-storage-cloudinary");
+const cloudinary = require("../config/cloudinary");
 
-const UPLOAD_DIR = path.join(__dirname, "..", "uploads", "recordings");
-fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, UPLOAD_DIR),
-  filename: (_req, file, cb) => {
-    const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-    cb(null, `${unique}${path.extname(file.originalname)}`);
+const storage = new CloudinaryStorage({
+  cloudinary,
+  params: {
+    folder: "maktab/recordings",
+    resource_type: "video", // Cloudinary uses "video" for both audio and video
   },
 });
 
 function fileFilter(_req, file, cb) {
   const isMedia =
     file.mimetype.startsWith("audio/") || file.mimetype.startsWith("video/");
-
   if (!isMedia) {
     return cb(new Error("Only audio or video recordings are allowed"));
   }
-
   cb(null, true);
 }
 
 const upload = multer({
   storage,
   fileFilter,
-  limits: { fileSize: 200 * 1024 * 1024 },
+  limits: { fileSize: 100 * 1024 * 1024 }, // 100MB (Cloudinary free tier limit)
 });
 
 module.exports = upload;

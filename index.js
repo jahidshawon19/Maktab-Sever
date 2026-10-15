@@ -10,24 +10,15 @@ const usersRoutes = require("./routes/usersRoutes");
 const attendanceRoutes = require("./routes/attendanceRoutes");
 
 const app = express();
-const PORT = process.env.PORT || 4000;
 
-// Apply CORS to all routes except /stream endpoints
-app.use((req, res, next) => {
-  if (!req.path.includes('/stream')) {
-    cors({
-      origin: (origin, callback) => {
-        callback(null, origin || '*');
-      },
-      credentials: true,
-      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization'],
-      exposedHeaders: ['Content-Range', 'Content-Length', 'Content-Type'],
-    })(req, res, next);
-  } else {
-    next();
-  }
-});
+app.use(
+  cors({
+    origin: (origin, callback) => callback(null, origin || "*"),
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  })
+);
 
 app.use(express.json());
 
@@ -36,9 +27,7 @@ app.use("/api/recordings", recordingRoutes);
 app.use("/api/auth/users", usersRoutes);
 app.use("/api/attendance", attendanceRoutes);
 
-app.get("/", (_req, res) => {
-  res.json({ message: "API is running" });
-});
+app.get("/", (_req, res) => res.json({ message: "API is running" }));
 
 app.use((error, _req, res, _next) => {
   if (error instanceof multer.MulterError || error) {
@@ -47,13 +36,24 @@ app.use((error, _req, res, _next) => {
   res.status(500).json({ message: "Server error" });
 });
 
-connectDB()
-  .then(() => {
-    app.listen(PORT, () => {
-      console.log(`Server running on http://localhost:${PORT}`);
+// Connect to DB and start server only when run directly (local dev)
+if (require.main === module) {
+  const PORT = process.env.PORT || 4000;
+  connectDB()
+    .then(() => {
+      app.listen(PORT, () =>
+        console.log(`Server running on http://localhost:${PORT}`)
+      );
+    })
+    .catch((err) => {
+      console.error("MongoDB connection error:", err.message);
+      process.exit(1);
     });
-  })
-  .catch((error) => {
-    console.error("MongoDB connection error:", error.message);
-    process.exit(1);
-  });
+} else {
+  // Vercel: connect once at cold start (no listen)
+  connectDB().catch((err) =>
+    console.error("MongoDB connection error:", err.message)
+  );
+}
+
+module.exports = app;

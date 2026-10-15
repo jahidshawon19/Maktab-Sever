@@ -14,13 +14,22 @@
   ],
   "env": {
     "MONGODB_URI": {
-      "description": "MongoDB connection string"
+      "description": "MongoDB Atlas connection string"
     },
     "JWT_SECRET": {
-      "description": "JWT secret key for authentication"
+      "description": "JWT secret key for authentication (min 32 characters)"
     },
-    "PORT": {
-      "default": "4000"
+    "CLOUDINARY_CLOUD_NAME": {
+      "description": "Cloudinary cloud name from dashboard"
+    },
+    "CLOUDINARY_API_KEY": {
+      "description": "Cloudinary API key from dashboard"
+    },
+    "CLOUDINARY_API_SECRET": {
+      "description": "Cloudinary API secret from dashboard"
+    },
+    "NODE_ENV": {
+      "default": "production"
     }
   }
 }
