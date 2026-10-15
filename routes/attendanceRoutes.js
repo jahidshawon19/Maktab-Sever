@@ -61,75 +61,68 @@ router.get('/report-pdf', authMiddleware, requireRole('teacher', 'admin'), async
 
     const report = await getAttendanceReport(start, end);
 
-    // Create PDF document
     const doc = new PDFDocument({ margin: 40 });
     const filename = `Attendance_Report_${start.toISOString().split('T')[0]}_to_${end.toISOString().split('T')[0]}.pdf`;
 
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    // Buffer the PDF in memory (streaming doesn't work reliably in serverless)
+    const pdfBuffer = await new Promise((resolve, reject) => {
+      const chunks = [];
+      doc.on('data', chunk => chunks.push(chunk));
+      doc.on('end', () => resolve(Buffer.concat(chunks)));
+      doc.on('error', reject);
 
-    doc.pipe(res);
+      // Title
+      doc.fontSize(20).font('Helvetica-Bold').text('Student Attendance Report', { align: 'center' });
+      doc.moveDown(0.5);
 
-    // Title
-    doc.fontSize(20).font('Helvetica-Bold').text('Student Attendance Report', { align: 'center' });
-    doc.moveDown(0.5);
+      const startStr = start.toLocaleDateString();
+      const endStr = end.toLocaleDateString();
+      doc.fontSize(12).font('Helvetica').text(`Period: ${startStr} to ${endStr}`, { align: 'center' });
+      doc.moveDown(1);
 
-    // Date range
-    const startStr = start.toLocaleDateString();
-    const endStr = end.toLocaleDateString();
-    doc.fontSize(12).font('Helvetica').text(`Period: ${startStr} to ${endStr}`, { align: 'center' });
-    doc.moveDown(1);
+      const tableTop = doc.y;
+      const col1 = 50, col2 = 250, col3 = 350, col4 = 450;
+      const rowHeight = 25;
 
-    // Table headers
-    const tableTop = doc.y;
-    const col1 = 50;
-    const col2 = 250;
-    const col3 = 350;
-    const col4 = 450;
-    const rowHeight = 25;
+      doc.fontSize(11).font('Helvetica-Bold');
+      doc.text('Student Name', col1, tableTop);
+      doc.text('Present', col2, tableTop);
+      doc.text('Absent', col3, tableTop);
+      doc.text('Percentage', col4, tableTop);
+      doc.moveTo(col1, tableTop + 18).lineTo(550, tableTop + 18).stroke();
 
-    doc.fontSize(11).font('Helvetica-Bold');
-    doc.text('Student Name', col1, tableTop);
-    doc.text('Present', col2, tableTop);
-    doc.text('Absent', col3, tableTop);
-    doc.text('Percentage', col4, tableTop);
+      doc.fontSize(10).font('Helvetica');
+      let yPosition = tableTop + 30;
+      const pageHeight = doc.page.height;
 
-    // Draw line under headers
-    doc.moveTo(col1, tableTop + 18).lineTo(550, tableTop + 18).stroke();
+      const students = Object.values(report).sort((a, b) =>
+        a.student.fullName.localeCompare(b.student.fullName)
+      );
 
-    // Table rows
-    doc.fontSize(10).font('Helvetica');
-    let yPosition = tableTop + 30;
-    const pageHeight = doc.page.height;
-    const bottomMargin = 60;
+      for (const { student, present, absent } of students) {
+        const total = present + absent;
+        const percentage = total > 0 ? ((present / total) * 100).toFixed(1) : 0;
 
-    const students = Object.values(report).sort((a, b) =>
-      a.student.fullName.localeCompare(b.student.fullName)
-    );
+        if (yPosition > pageHeight - 60) {
+          doc.addPage();
+          yPosition = 40;
+        }
 
-    for (const studentReport of students) {
-      const { student, present, absent } = studentReport;
-      const total = present + absent;
-      const percentage = total > 0 ? ((present / total) * 100).toFixed(1) : 0;
-
-      // Check if we need a new page
-      if (yPosition > pageHeight - bottomMargin) {
-        doc.addPage();
-        yPosition = 40;
+        doc.text(student.fullName, col1, yPosition);
+        doc.text(present.toString(), col2, yPosition);
+        doc.text(absent.toString(), col3, yPosition);
+        doc.text(`${percentage}%`, col4, yPosition);
+        yPosition += rowHeight;
       }
 
-      doc.text(student.fullName, col1, yPosition);
-      doc.text(present.toString(), col2, yPosition);
-      doc.text(absent.toString(), col3, yPosition);
-      doc.text(`${percentage}%`, col4, yPosition);
+      doc.fontSize(9).text(`Generated on ${new Date().toLocaleString()}`, { align: 'center' });
+      doc.end();
+    });
 
-      yPosition += rowHeight;
-    }
-
-    // Footer
-    doc.fontSize(9).text('Generated on ' + new Date().toLocaleString(), { align: 'center' }, pageHeight - 30);
-
-    doc.end();
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Length', pdfBuffer.length);
+    res.send(pdfBuffer);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
