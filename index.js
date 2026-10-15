@@ -11,15 +11,8 @@ const attendanceRoutes = require("./routes/attendanceRoutes");
 
 const app = express();
 
-const corsOptions = {
-  origin: true, // reflects the request origin, works with credentials
-  credentials: true,
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"],
-};
-
-app.use(cors(corsOptions));
-app.options("*", cors(corsOptions)); // handle preflight for all routes
+app.use(cors());
+app.options("*", cors());
 
 app.use(express.json());
 
