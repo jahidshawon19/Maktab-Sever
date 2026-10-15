@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const PDFDocument = require('pdfkit');
+const { PDFDocument, StandardFonts, rgb } = require('pdf-lib');
 const authMiddleware = require('../middleware/authmiddleware');
 const requireRole = require('../middleware/role');
 const {
@@ -61,68 +61,67 @@ router.get('/report-pdf', authMiddleware, requireRole('teacher', 'admin'), async
 
     const report = await getAttendanceReport(start, end);
 
-    const doc = new PDFDocument({ margin: 40 });
     const filename = `Attendance_Report_${start.toISOString().split('T')[0]}_to_${end.toISOString().split('T')[0]}.pdf`;
 
-    // Buffer the PDF in memory (streaming doesn't work reliably in serverless)
-    const pdfBuffer = await new Promise((resolve, reject) => {
-      const chunks = [];
-      doc.on('data', chunk => chunks.push(chunk));
-      doc.on('end', () => resolve(Buffer.concat(chunks)));
-      doc.on('error', reject);
+    const pdfDoc = await PDFDocument.create();
+    const bold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+    const regular = await pdfDoc.embedFont(StandardFonts.Helvetica);
 
-      // Title
-      doc.fontSize(20).font('Helvetica-Bold').text('Student Attendance Report', { align: 'center' });
-      doc.moveDown(0.5);
+    const pageWidth = 612, pageHeight = 792, margin = 50;
+    let page = pdfDoc.addPage([pageWidth, pageHeight]);
+    let y = pageHeight - margin;
 
-      const startStr = start.toLocaleDateString();
-      const endStr = end.toLocaleDateString();
-      doc.fontSize(12).font('Helvetica').text(`Period: ${startStr} to ${endStr}`, { align: 'center' });
-      doc.moveDown(1);
+    const col1 = margin, col2 = 280, col3 = 370, col4 = 460;
 
-      const tableTop = doc.y;
-      const col1 = 50, col2 = 250, col3 = 350, col4 = 450;
-      const rowHeight = 25;
+    // Title
+    const title = 'Student Attendance Report';
+    const titleW = bold.widthOfTextAtSize(title, 18);
+    page.drawText(title, { x: (pageWidth - titleW) / 2, y, size: 18, font: bold, color: rgb(0, 0, 0) });
+    y -= 24;
 
-      doc.fontSize(11).font('Helvetica-Bold');
-      doc.text('Student Name', col1, tableTop);
-      doc.text('Present', col2, tableTop);
-      doc.text('Absent', col3, tableTop);
-      doc.text('Percentage', col4, tableTop);
-      doc.moveTo(col1, tableTop + 18).lineTo(550, tableTop + 18).stroke();
+    // Date range
+    const period = `Period: ${start.toLocaleDateString()} to ${end.toLocaleDateString()}`;
+    const periodW = regular.widthOfTextAtSize(period, 11);
+    page.drawText(period, { x: (pageWidth - periodW) / 2, y, size: 11, font: regular, color: rgb(0.3, 0.3, 0.3) });
+    y -= 30;
 
-      doc.fontSize(10).font('Helvetica');
-      let yPosition = tableTop + 30;
-      const pageHeight = doc.page.height;
+    // Headers
+    page.drawText('Student Name', { x: col1, y, size: 11, font: bold });
+    page.drawText('Present', { x: col2, y, size: 11, font: bold });
+    page.drawText('Absent', { x: col3, y, size: 11, font: bold });
+    page.drawText('Percentage', { x: col4, y, size: 11, font: bold });
+    y -= 5;
+    page.drawLine({ start: { x: col1, y }, end: { x: pageWidth - margin, y }, thickness: 1, color: rgb(0, 0, 0) });
+    y -= 18;
 
-      const students = Object.values(report).sort((a, b) =>
-        a.student.fullName.localeCompare(b.student.fullName)
-      );
+    const students = Object.values(report).sort((a, b) =>
+      a.student.fullName.localeCompare(b.student.fullName)
+    );
 
-      for (const { student, present, absent } of students) {
-        const total = present + absent;
-        const percentage = total > 0 ? ((present / total) * 100).toFixed(1) : 0;
-
-        if (yPosition > pageHeight - 60) {
-          doc.addPage();
-          yPosition = 40;
-        }
-
-        doc.text(student.fullName, col1, yPosition);
-        doc.text(present.toString(), col2, yPosition);
-        doc.text(absent.toString(), col3, yPosition);
-        doc.text(`${percentage}%`, col4, yPosition);
-        yPosition += rowHeight;
+    for (const { student, present, absent } of students) {
+      if (y < margin + 20) {
+        page = pdfDoc.addPage([pageWidth, pageHeight]);
+        y = pageHeight - margin;
       }
+      const total = present + absent;
+      const percentage = total > 0 ? ((present / total) * 100).toFixed(1) + '%' : '0%';
 
-      doc.fontSize(9).text(`Generated on ${new Date().toLocaleString()}`, { align: 'center' });
-      doc.end();
-    });
+      page.drawText(student.fullName, { x: col1, y, size: 10, font: regular });
+      page.drawText(String(present), { x: col2, y, size: 10, font: regular });
+      page.drawText(String(absent), { x: col3, y, size: 10, font: regular });
+      page.drawText(percentage, { x: col4, y, size: 10, font: regular });
+      y -= 22;
+    }
+
+    // Footer
+    const footer = `Generated on ${new Date().toLocaleString()}`;
+    page.drawText(footer, { x: col1, y: margin - 20, size: 9, font: regular, color: rgb(0.5, 0.5, 0.5) });
+
+    const pdfBytes = await pdfDoc.save();
 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-    res.setHeader('Content-Length', pdfBuffer.length);
-    res.send(pdfBuffer);
+    res.send(Buffer.from(pdfBytes));
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
